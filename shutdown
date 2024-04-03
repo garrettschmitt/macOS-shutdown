@@ -1,0 +1,104 @@
+#!/bin/sh
+#
+# shutdown script for macOS 
+#  This script is intended to serve as a better alternative to /sbin/shutdown
+#  and /sbin/reboot.
+#
+
+readonly AS_QUIT_APPS='
+set noQuit to {"Finder"} 
+
+tell application "System Events"
+	set appList to (name of processes where background only is false)
+end tell
+
+repeat with a in appList
+	if a is not in noQuit then
+        tell application a to quit
+	end if
+end repeat
+'
+
+readonly AS_CLOSE_FINDER='
+tell application "Finder"
+	close every window
+end tell
+'
+
+readonly AS_SYSTEM_EVENTS_PREFIX='tell application "System Events" to'
+
+
+usage() {
+    echo "Usage: shutdown [-d|h|q|r|s]"
+    printf "\t-d    Debug mode.\n"
+    printf "\t-h    Help\n"
+    printf "\t-q    Only quit all applications, will not shut down/reboot.\n"
+    printf "\t-r    Reboot, if not supplied the machine will shut down.\n"
+    printf "\t-s    Save state, apps will re-open after shut down/reboot.\n"
+}
+
+
+# do nothing when SIGHUP is received since we want to keep executing after
+#  whatever terminal this script is called will likely be quit
+trap '' SIGHUP
+
+
+debug=false
+quit=false
+save_state=false
+shutdown_operation='shut down'
+
+while getopts ":dqhrs" opt; do
+    case $opt in
+        d)
+            debug=true
+            ;;
+        h)
+            usage
+            exit 0
+            ;;
+        q)
+            quit=true
+            ;;
+        r)
+            shutdown_operation=restart
+            ;;
+        s)
+            save_state=true
+            ;;
+        \?)
+            echo "Invalid option: -$OPTARG" >&2
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+if [[ "$OSTYPE" != "darwin"* ]]; then
+    echo "This script is only supported on macOS." >&2
+    exit 1
+fi
+
+if [[ "$quit" = true && "$save_state" == true ]]; then
+    echo "Invalid options: -q and -s may not be used together." >&2
+    exit 1
+fi
+
+
+if [[ "$debug" = true ]]; then 
+    echo "debug mode" >&2
+    echo "quit: $quit" >&2
+    echo "shutdown operation: $shutdown_operation" >&2
+    echo "save state: $save_state" >&2
+
+    exit 0
+fi
+
+if [[ "$save_state" = false ]] ; then
+    /usr/bin/osascript -e "$AS_QUIT_APPS"
+    /usr/bin/osascript -e "$AS_CLOSE_FINDER"
+fi
+
+if [[ "$quit" = false ]]; then
+    /usr/bin/osascript -e "$AS_SYSTEM_EVENTS_PREFIX $shutdown_operation"
+fi
