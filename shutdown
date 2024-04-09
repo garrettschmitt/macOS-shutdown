@@ -30,11 +30,11 @@ readonly AS_SYSTEM_EVENTS_PREFIX='tell application "System Events" to'
 
 usage() {
     echo "Usage: shutdown [-d|h|q|r|s]"
-    printf "\t-d    Debug mode.\n"
-    printf "\t-h    Help\n"
+    printf "\t-a    Do not quit applications so that the reopen after shut down/reboot.\n"
+    printf "\t-h    Halt/shut down the system.\n"
     printf "\t-q    Only quit all applications, will not shut down/reboot.\n"
-    printf "\t-r    Reboot, if not supplied the machine will shut down.\n"
-    printf "\t-s    Save state, apps will re-open after shut down/reboot.\n"
+    printf "\t-r    Reboot/restart the system.\n"
+
 }
 
 
@@ -43,29 +43,25 @@ usage() {
 trap '' SIGHUP
 
 
-debug=false
-quit=false
-save_state=false
-shutdown_operation='shut down'
+if [[ $# -eq 0 ]]; then
+    usage
+    exit 1
+fi
 
-while getopts ":dqhrs" opt; do
+
+app_state=false
+debug=false
+halt=false
+quit=false
+reboot=false
+
+while getopts ":adqhr" opt; do
     case $opt in
-        d)
-            debug=true
-            ;;
-        h)
-            usage
-            exit 0
-            ;;
-        q)
-            quit=true
-            ;;
-        r)
-            shutdown_operation=restart
-            ;;
-        s)
-            save_state=true
-            ;;
+        a) app_state=true;;
+        d) debug=true;;
+        h) halt=true;;
+        q) quit=true;;
+        r) reboot=true;;
         \?)
             echo "Invalid option: -$OPTARG" >&2
             usage
@@ -79,26 +75,45 @@ if [[ "$OSTYPE" != "darwin"* ]]; then
     exit 1
 fi
 
-if [[ "$quit" = true && "$save_state" == true ]]; then
-    echo "Invalid options: -q and -s may not be used together." >&2
+if [[ "$halt" = true && "$reboot" == true ]]; then
+    echo "Invalid options: -h and -r may not be used together." >&2
     exit 1
 fi
 
+if [[ "$quit" = true && "$halt" = true ]]; then
+    echo "Invalid options: -q and -h may not be used together." >&2
+    exit 1
+fi
 
-if [[ "$debug" = true ]]; then 
-    echo "debug mode" >&2
-    echo "quit: $quit" >&2
-    echo "shutdown operation: $shutdown_operation" >&2
-    echo "save state: $save_state" >&2
+if [[ "$quit" = true && "$reboot" = true ]]; then
+    echo "Invalid options: -q and -r may not be used together." >&2
+    exit 1
+fi
+
+if [[ "$app_state" = true && "$quit" == true ]]; then
+    echo "Invalid options: -a and -q may not be used together." >&2
+    exit 1
+fi
+
+if [[ "$debug" = true ]]; then
+    echo "app_state: $app_state"
+    echo "halt: $halt"
+    echo "quit: $quit"
+    echo "reboot: $reboot"
 
     exit 0
 fi
 
-if [[ "$save_state" = false ]] ; then
+
+if [[ "$app_state" = false ]] ; then
     /usr/bin/osascript -e "$AS_QUIT_APPS"
     /usr/bin/osascript -e "$AS_CLOSE_FINDER"
 fi
 
-if [[ "$quit" = false ]]; then
-    /usr/bin/osascript -e "$AS_SYSTEM_EVENTS_PREFIX $shutdown_operation"
+if [[ "$halt" = true ]]; then
+    /usr/bin/osascript -e "$AS_SYSTEM_EVENTS_PREFIX shut down"
+fi
+
+if [[ "$reboot" = true ]]; then
+    /usr/bin/osascript -e "$AS_SYSTEM_EVENTS_PREFIX restart"
 fi
